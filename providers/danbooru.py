@@ -9,7 +9,7 @@ class DanbooruProvider(Provider):
     """
     Danbooru 公式 API (無認証・無料)。
     無認証ユーザーは 1 検索につき最大 2 タグまで。
-    safe フィルタはクライアント側で行う。
+    safe フィルタはクライアント側で行う (rating g/s のみ通す)。
     """
     name = "Danbooru"
     BASE = "https://danbooru.donmai.us"
@@ -20,23 +20,26 @@ class DanbooruProvider(Provider):
         angle_tag: str,
         angle_text: str,
         safe: bool,
-        limit: int = 15,
+        limit: int = 20,
     ) -> list[ImageResult]:
-        tags: list[str] = []
-        if keyword:
-            tags.append(keyword.strip().replace(" ", "_"))
-        if angle_tag:
+        # ユーザー入力は最大 2 タグまで。それ以上あれば angle_tag は追加できない。
+        user_tokens = keyword.strip().split()[:2] if keyword else []
+        tags: list[str] = list(user_tokens)
+        if angle_tag and len(tags) < 2:
             tags.append(angle_tag)
-        tags = tags[:2]  # 無認証の 2 タグ制限
+        tags = tags[:2]
 
-        fetch_limit = min(limit * 3 if safe else limit + 5, 100)
+        if not tags:
+            return []
+
+        fetch_limit = min(limit * 3 if safe else limit + 10, 100)
 
         try:
             r = httpx.get(
                 f"{self.BASE}/posts.json",
                 params={"tags": " ".join(tags), "limit": fetch_limit},
                 timeout=10.0,
-                headers={"User-Agent": "image-angle-reference/0.1"},
+                headers={"User-Agent": "image-angle-reference/0.2"},
             )
             r.raise_for_status()
             data = r.json()
